@@ -9,7 +9,8 @@ const MACRO_AREAS = [
   "Nou Barris",
   "Sant Andreu",
   "Sant Martí",
-  "Hospitalet"
+  "Hospitalet",
+  "Badalona"
 ];
 
 const SUBAREAS = [
@@ -31,7 +32,8 @@ const SUBAREAS = [
   "Sant Andreu",
   "Poblenou",
   "Sant Martí",
-  "Hospitalet"
+  "Hospitalet",
+  "Badalona"
 ];
 
 const AREA_RULES = [
@@ -54,7 +56,8 @@ const AREA_RULES = [
   { variants: ["sant andreu"], area: "Sant Andreu", macroArea: "Sant Andreu" },
   { variants: ["poblenou", "el poblenou", "poble nou", "la vila olímpica", "vila olímpica", "rambla del poblenou"], area: "Poblenou", macroArea: "Sant Martí" },
   { variants: ["sant martí", "sant marti", "el clot", "camp de l'arpa", "el parc i la llacuna"], area: "Sant Martí", macroArea: "Sant Martí" },
-  { variants: ["hospitalet", "l'hospitalet", "l'hospitalet de llobregat", "hospitalet de llobregat"], area: "Hospitalet", macroArea: "Hospitalet" }
+  { variants: ["hospitalet", "l'hospitalet", "l'hospitalet de llobregat", "hospitalet de llobregat"], area: "Hospitalet", macroArea: "Hospitalet" },
+  { variants: ["badalona"], area: "Badalona", macroArea: "Badalona" }
 ];
 
 const SOURCE_PATTERNS = [

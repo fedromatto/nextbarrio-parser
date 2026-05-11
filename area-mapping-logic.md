@@ -32,8 +32,9 @@ Any property table that stores location data uses **three columns**:
 | Sant Andreu | Sant Andreu |
 | Sant Martí | Poblenou, Sant Martí |
 | Hospitalet | Hospitalet |
+| Badalona | Badalona |
 
-When a macro area has only one sub-area with the same name (e.g. Gràcia, Horta-Guinardó, Hospitalet), both `macro_area` and `area` are set to that same string.
+When a macro area has only one sub-area with the same name (e.g. Gràcia, Horta-Guinardó, Hospitalet, Badalona), both `macro_area` and `area` are set to that same string.
 
 ---
 
@@ -85,6 +86,9 @@ Try to map the raw `area_parsed` string to a canonical sub-area. Common known va
 **Hospitalet**
 - `hospitalet`, `l'hospitalet`, `l'hospitalet de llobregat`, `hospitalet de llobregat` → **Hospitalet**
 
+**Badalona**
+- `badalona` → **Badalona**
+
 ---
 
 ### 2. Fallback from old `area` slug
@@ -110,6 +114,7 @@ If `area_parsed` didn't match, derive a default sub-area from the old lowercase 
 | `sarria` | Sarrià-Sant Gervasi | Sarrià-Sant Gervasi |
 | `sant andreu` | Sant Andreu | Sant Andreu |
 | `hospitalet` | Hospitalet | Hospitalet |
+| `badalona` | Badalona | Badalona |
 
 ---
 
@@ -132,6 +137,7 @@ After the exact-match passes, run pattern-based UPDATE statements for free-text 
 | `ILIKE '%sants%'` | Sants | Sants-Montjuïc |
 | `ILIKE '%poblenou%'` | Poblenou | Sant Martí |
 | `ILIKE '%hospitalet%'` | Hospitalet | Hospitalet |
+| `ILIKE '%badalona%'` | Badalona | Badalona |
 
 The Eixample Sant Antoni rule **must always be placed before** the generic Eixample catch-all, otherwise `"Eixample Sant Antoni"` would be mapped to sub-area `Eixample` instead of `Sant Antoni`.
 
@@ -143,6 +149,8 @@ Some rows already have a canonical `area` value (set by a previous migration or 
 |---|---|
 | `Sagrada Família` | Eixample |
 | `Poble-sec` | Sants-Montjuïc |
+| `Hospitalet` | Hospitalet |
+| `Badalona` | Badalona |
 
 Add similar exact-equality patches whenever a new sub-area's canonical name is not caught by any ILIKE pattern.
 
