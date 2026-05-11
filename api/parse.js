@@ -26,6 +26,7 @@ module.exports = async function handler(req, res) {
       });
     } catch (error) {
       supabaseError = error.message;
+      console.error("Supabase save failed:", error);
     }
 
     sendJson(res, 200, {

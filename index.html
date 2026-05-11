@@ -851,7 +851,11 @@
         }
 
         displayResults(result);
-        showMessage('✓ Saved to Supabase!', 'success');
+        if (result.saved_to_supabase === false) {
+          showMessage('⚠ Parsed but NOT saved: ' + (result.supabase_error || 'unknown Supabase error'), 'error');
+        } else {
+          showMessage('✓ Saved to Supabase!', 'success');
+        }
 
       } catch (e) {
         showMessage('Error: ' + e.message, 'error');
