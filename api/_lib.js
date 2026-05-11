@@ -1,21 +1,60 @@
 const MACRO_AREAS = [
-  "born",
-  "eixample",
-  "gotico",
-  "raval",
-  "sarria",
-  "sants",
-  "poble sec",
-  "poble nou",
-  "horta",
-  "barceloneta",
-  "sagrada familia",
-  "gracia",
-  "sant antoni",
-  "hospitalet",
-  "fort pienc",
-  "el clot",
-  "sant andreu"
+  "Ciutat Vella",
+  "Eixample",
+  "Gràcia",
+  "Sants-Montjuïc",
+  "Les Corts",
+  "Sarrià-Sant Gervasi",
+  "Horta-Guinardó",
+  "Nou Barris",
+  "Sant Andreu",
+  "Sant Martí",
+  "Hospitalet"
+];
+
+const SUBAREAS = [
+  "Gothic Quarter",
+  "El Raval",
+  "El Born",
+  "Barceloneta",
+  "Eixample",
+  "Sant Antoni",
+  "Sagrada Família",
+  "Gràcia",
+  "Sants",
+  "Poble-sec",
+  "Montjuïc",
+  "Les Corts",
+  "Sarrià-Sant Gervasi",
+  "Horta-Guinardó",
+  "Nou Barris",
+  "Sant Andreu",
+  "Poblenou",
+  "Sant Martí",
+  "Hospitalet"
+];
+
+const AREA_RULES = [
+  { variants: ["el born", "born", "la ribera", "sant pere", "santa caterina"], area: "El Born", macroArea: "Ciutat Vella" },
+  { variants: ["barri gòtic", "barri gotic", "gòtic", "gotic", "gotico", "gothic quarter", "el gòtic"], area: "Gothic Quarter", macroArea: "Ciutat Vella" },
+  { variants: ["el raval", "raval"], area: "El Raval", macroArea: "Ciutat Vella" },
+  { variants: ["barceloneta", "la barceloneta"], area: "Barceloneta", macroArea: "Ciutat Vella" },
+  { variants: ["sant antoni"], area: "Sant Antoni", macroArea: "Eixample" },
+  { variants: ["sagrada família", "sagrada familia", "la sagrada família"], area: "Sagrada Família", macroArea: "Eixample" },
+  { variants: ["fort pienc"], area: null, macroArea: "Eixample" },
+  { variants: ["eixample", "l'eixample", "dreta de l'eixample", "esquerra de l'eixample", "nova esquerra de l'eixample", "antiga esquerra de l'eixample", "l'antiga esquerra de l'eixample"], area: "Eixample", macroArea: "Eixample" },
+  { variants: ["gràcia", "gracia", "vila de gràcia", "camp d'en grassot"], area: "Gràcia", macroArea: "Gràcia" },
+  { variants: ["sants", "sants-badal", "hostafrancs"], area: "Sants", macroArea: "Sants-Montjuïc" },
+  { variants: ["poble sec", "poble-sec", "el poble sec"], area: "Poble-sec", macroArea: "Sants-Montjuïc" },
+  { variants: ["montjuïc", "montjuic"], area: "Montjuïc", macroArea: "Sants-Montjuïc" },
+  { variants: ["les corts", "pedralbes", "la maternitat"], area: "Les Corts", macroArea: "Les Corts" },
+  { variants: ["sarrià-sant gervasi", "sarria-sant gervasi", "sarrià", "sarria", "sant gervasi", "les tres torres", "el putxet", "sant gervasi - la bonanova"], area: "Sarrià-Sant Gervasi", macroArea: "Sarrià-Sant Gervasi" },
+  { variants: ["horta-guinardó", "horta-guinardo", "horta", "guinardó", "guinardo"], area: "Horta-Guinardó", macroArea: "Horta-Guinardó" },
+  { variants: ["nou barris"], area: "Nou Barris", macroArea: "Nou Barris" },
+  { variants: ["sant andreu"], area: "Sant Andreu", macroArea: "Sant Andreu" },
+  { variants: ["poblenou", "el poblenou", "poble nou", "la vila olímpica", "vila olímpica", "rambla del poblenou"], area: "Poblenou", macroArea: "Sant Martí" },
+  { variants: ["sant martí", "sant marti", "el clot", "camp de l'arpa", "el parc i la llacuna"], area: "Sant Martí", macroArea: "Sant Martí" },
+  { variants: ["hospitalet", "l'hospitalet", "l'hospitalet de llobregat", "hospitalet de llobregat"], area: "Hospitalet", macroArea: "Hospitalet" }
 ];
 
 const SOURCE_PATTERNS = [
@@ -93,8 +132,10 @@ Return ONLY valid JSON with these fields (use null if not found):
   "listing_type": "flat" or "room",
   "property_type": "temporal" or "long_term",
   "address": "string",
-  "sub_area": "string",
-  "area": "MUST be one of: ${macroAreas}",
+  "area_parsed": "raw neighbourhood/district string exactly as written in the listing",
+  "sub_area": "raw neighbourhood/district string exactly as written in the listing",
+  "area": "best canonical sub-area, if clear. MUST be one of: ${SUBAREAS.map(area => `"${area}"`).join(", ")}",
+  "macro_area": "best canonical district, if clear. MUST be one of: ${macroAreas}",
   "availability": "available" or "not available yet" or "not available anymore",
   "availability_date": "YYYY-MM-DD or null",
   "price_month": number,
@@ -121,7 +162,8 @@ IMPORTANT:
 - European number format: "1.200 EUR" means 1200 euros.
 - If total bedrooms are mentioned but not split into double/single, put total in double_bedrooms and 0 in single_bedrooms.
 - For rooms in shared flats, count the room being rented.
-- Map neighborhoods to the closest macro area.
+- Preserve the raw neighbourhood/district text in area_parsed.
+- Map neighbourhoods to the closest canonical area and macro_area when possible.
 
 Listing URL: ${listingUrl || "Not provided"}
 
@@ -157,6 +199,7 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
   const priceMonth = parsed.price_month ?? null;
   const sizeM2 = parsed.size_m2 ?? null;
   const calculatedPriceM2 = priceMonth && sizeM2 ? Number((priceMonth / sizeM2).toFixed(2)) : parsed.price_m2 ?? null;
+  const location = normalizeLocation(parsed);
 
   return {
     name: title || parsed.overall_description || "New Listing",
@@ -168,9 +211,10 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
     images,
     address: parsed.address ?? null,
     status: "to_contact",
-    area: parsed.area ?? null,
-    area_parsed: parsed.area ?? null,
-    sub_area: parsed.sub_area ?? null,
+    macro_area: location.macroArea,
+    area: location.area,
+    area_parsed: location.areaParsed,
+    sub_area: location.areaParsed,
     availability: parsed.availability ?? null,
     available_from: parsed.availability_date ?? null,
     availability_date: parsed.availability_date ?? null,
@@ -196,6 +240,97 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
     admits_couples: parsed.admits_couples ?? null,
     notes: parsed.condition ?? null
   };
+}
+
+function normalizeLocation(parsed) {
+  const rawArea = firstText(parsed.area_parsed, parsed.sub_area, parsed.area);
+  const exact = findAreaRule(rawArea, true) || findAreaRule(parsed.area, true);
+  if (exact) {
+    return {
+      macroArea: exact.macroArea,
+      area: exact.area,
+      areaParsed: rawArea || parsed.area || exact.area || exact.macroArea
+    };
+  }
+
+  const patternText = firstText(rawArea, parsed.address, parsed.overall_description, parsed.comments);
+  const pattern = findAreaRule(patternText, false);
+  if (pattern) {
+    return {
+      macroArea: pattern.macroArea,
+      area: pattern.area,
+      areaParsed: rawArea || pattern.area || pattern.macroArea
+    };
+  }
+
+  const canonicalArea = canonicalize(parsed.area, SUBAREAS);
+  if (canonicalArea) {
+    return {
+      macroArea: macroAreaForSubarea(canonicalArea),
+      area: canonicalArea,
+      areaParsed: rawArea || canonicalArea
+    };
+  }
+
+  const canonicalMacroArea = canonicalize(parsed.macro_area, MACRO_AREAS);
+  if (canonicalMacroArea) {
+    return {
+      macroArea: canonicalMacroArea,
+      area: singleSubareaForMacro(canonicalMacroArea),
+      areaParsed: rawArea || canonicalMacroArea
+    };
+  }
+
+  return {
+    macroArea: null,
+    area: rawArea || null,
+    areaParsed: rawArea || null
+  };
+}
+
+function firstText(...values) {
+  return values.find(value => typeof value === "string" && value.trim())?.trim() || "";
+}
+
+function findAreaRule(value, exactOnly) {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+
+  for (const rule of AREA_RULES) {
+    for (const variant of rule.variants) {
+      const normalizedVariant = normalizeText(variant);
+      if (exactOnly ? normalized === normalizedVariant : normalized.includes(normalizedVariant)) {
+        return rule;
+      }
+    }
+  }
+
+  return null;
+}
+
+function canonicalize(value, allowedValues) {
+  const normalized = normalizeText(value);
+  return allowedValues.find(allowedValue => normalizeText(allowedValue) === normalized) || null;
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[.,/#!$%^&*;:{}=_`~()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function macroAreaForSubarea(area) {
+  return AREA_RULES.find(rule => rule.area === area)?.macroArea || null;
+}
+
+function singleSubareaForMacro(macroArea) {
+  const matches = AREA_RULES.filter(rule => rule.macroArea === macroArea && rule.area);
+  const uniqueAreas = [...new Set(matches.map(rule => rule.area))];
+  return uniqueAreas.length === 1 ? uniqueAreas[0] : null;
 }
 
 async function supabaseFetch(path, { method = "GET", body, prefer } = {}) {
@@ -284,6 +419,7 @@ module.exports = {
   callClaude,
   checkUrlInSupabase,
   getEnv,
+  normalizeLocation,
   readJson,
   requirePost,
   saveToSupabase,
