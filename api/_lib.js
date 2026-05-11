@@ -35,9 +35,16 @@ const SOURCE_PATTERNS = [
 function getEnv() {
   return {
     claudeApiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || "",
-    supabaseUrl: process.env.SUPABASE_URL || "",
+    supabaseUrl: normalizeSupabaseUrl(process.env.SUPABASE_URL || ""),
     supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || ""
   };
+}
+
+function normalizeSupabaseUrl(url) {
+  return url
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/rest\/v1$/i, "");
 }
 
 function sendJson(res, status, payload) {
@@ -195,7 +202,8 @@ async function supabaseFetch(path, { method = "GET", body, prefer } = {}) {
   const { supabaseUrl, supabaseKey } = getEnv();
   if (!supabaseUrl || !supabaseKey) throw new Error("Supabase not configured");
 
-  const response = await fetch(`${supabaseUrl}${path}`, {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const response = await fetch(`${supabaseUrl}${normalizedPath}`, {
     method,
     headers: {
       "Content-Type": "application/json",
