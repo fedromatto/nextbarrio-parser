@@ -232,8 +232,10 @@ async function saveToSupabase({ parsed, url, images, title }) {
 
 async function insertSupabaseRow(row) {
   const cleaned = { ...row };
+  const removedColumns = [];
+  const maxAttempts = Object.keys(cleaned).length + 1;
 
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       return await supabaseFetch("/rest/v1/Properties", {
         method: "POST",
@@ -241,13 +243,24 @@ async function insertSupabaseRow(row) {
         prefer: "return=representation"
       });
     } catch (error) {
-      const missingColumn = error.message.match(/'([^']+)' column/)?.[1];
+      const missingColumn = extractMissingColumn(error.message);
       if (!missingColumn || !(missingColumn in cleaned)) throw error;
       delete cleaned[missingColumn];
+      removedColumns.push(missingColumn);
+      console.warn(`Removed unsupported Supabase column: ${missingColumn}`);
     }
   }
 
-  throw new Error("Supabase insert failed after removing unsupported columns");
+  throw new Error(`Supabase insert failed after removing unsupported columns: ${removedColumns.join(", ")}`);
+}
+
+function extractMissingColumn(message) {
+  return (
+    message.match(/'([^']+)' column/)?.[1] ||
+    message.match(/column ['"]([^'"]+)['"]/)?.[1] ||
+    message.match(/Could not find the ['"]([^'"]+)['"] column/)?.[1] ||
+    null
+  );
 }
 
 async function checkUrlInSupabase(url) {
