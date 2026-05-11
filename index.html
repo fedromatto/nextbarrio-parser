@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NextBarrio Parser</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      min-height: 100vh;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 0;
+    }
+    
+    ::selection { background: #a3e635; color: #0f0f0f; }
+    
+    .app {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 40px 24px;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    
+    .logo {
+      width: 14px;
+      height: 14px;
+      background: #a3e635;
+      transform: rotate(45deg);
+    }
+    
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 40px;
+      padding-left: 28px;
+    }
+    
+    /* Status Bar */
+    .status-bar {
+      display: flex;
+      gap: 16px;
+      padding: 16px 20px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      margin-bottom: 32px;
+      font-size: 12px;
+    }
+    
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #444;
+    }
+    
+    .status-dot.ok { background: #a3e635; }
+    .status-dot.error { background: #ef4444; }
+    
+    /* Sections */
+    .section {
+      margin-bottom: 24px;
+    }
+    
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    
+    /* Inputs */
+    input, textarea {
+      width: 100%;
+      padding: 14px 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #e8e8e8;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #a3e635;
+    }
+    
+    input::placeholder, textarea::placeholder {
+      color: #444;
+    }
+    
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+    
+    /* Buttons */
+    .btn {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #a3e635;
+      color: #0f0f0f;
+    }
+    
+    .btn-primary:hover { background: #bef264; }
+    .btn-primary:disabled { background: #3d4f1f; cursor: not-allowed; }
+    
+    .btn-secondary {
+      background: #2a2a2a;
+      color: #888;
+    }
+    
+    .btn-secondary:hover { background: #333; color: #aaa; }
+    
+    .btn-small {
+      padding: 8px 14px;
+      font-size: 12px;
+    }
+    
+    /* Button Row */
+    .button-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    
+    /* Image count badge */
+    .image-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #1f2a0f;
+      border: 1px solid #3d5a1f;
+      border-radius: 6px;
+      color: #a3e635;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    
+    .image-badge.empty {
+      background: #1a1a1a;
+      border-color: #2a2a2a;
+      color: #555;
+    }
+    
+    /* Results Card */
+    .results-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 24px;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    
+    .results-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: #a3e635;
+      margin-bottom: 4px;
+    }
+    
+    .results-subtitle {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .result-item label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #555;
+      margin-bottom: 4px;
+    }
+    
+    .result-item .value {
+      font-size: 15px;
+      color: #e8e8e8;
+    }
+    
+    .result-item .value.highlight {
+      color: #a3e635;
+      font-weight: 600;
+    }
+    
+    .result-item .value.muted {
+      color: #555;
+    }
+    
+    /* Amenities */
+    .amenities {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #2a2a2a;
+    }
+    
+    .amenity {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    
+    .amenity.yes { background: #1f2a0f; color: #a3e635; }
+    .amenity.no { background: #2a1a1a; color: #888; }
+    
+    /* Settings Panel */
+    .settings-panel {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      margin-top: 40px;
+      overflow: hidden;
+    }
+    
+    .settings-header {
+      padding: 16px 20px;
+      background: #151515;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    
+    .settings-header:hover { background: #1a1a1a; }
+    
+    .settings-header h3 {
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+    }
+    
+    .settings-toggle {
+      color: #555;
+      transition: transform 0.2s;
+    }
+    
+    .settings-panel.open .settings-toggle {
+      transform: rotate(180deg);
+    }
+    
+    .settings-content {
+      padding: 0 20px;
+      max-height: 0;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+    
+    .settings-panel.open .settings-content {
+      padding: 20px;
+      max-height: 500px;
+    }
+    
+    .settings-row {
+      margin-bottom: 16px;
+    }
+    
+    .settings-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .settings-row label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+    
+    .settings-row input {
+      font-size: 13px;
+    }
+    
+    /* Bookmarklet Section */
+    .bookmarklet-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #2a2a2a;
+    }
+    
+    .bookmarklet-link {
+      display: inline-block;
+      padding: 10px 18px;
+      background: #a3e635;
+      color: #0f0f0f;
+      text-decoration: none;
+      border-radius: 6px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: grab;
+    }
+    
+    .bookmarklet-link:active { cursor: grabbing; }
+    
+    .bookmarklet-help {
+      font-size: 12px;
+      color: #555;
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+    
+    /* Error/Success Messages */
+    .message {
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+    
+    .message.error {
+      background: #2a1515;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+    }
+    
+    .message.success {
+      background: #1a2a1a;
+      border: 1px solid #166534;
+      color: #86efac;
+    }
+
+    .message.warning {
+      background: #2a1f0a;
+      border: 1px solid #92400e;
+      color: #fcd34d;
+    }
+
+    .warning-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    
+    /* Loading State */
+    .loading .btn-primary {
+      background: #3d4f1f;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .loading-text {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    /* Tab Switcher */
+    .tab-switcher {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      background: #1a1a1a;
+      border-radius: 10px;
+      margin-bottom: 28px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      color: #555;
+      letter-spacing: 0.3px;
+    }
+
+    .tab-btn.active {
+      background: #a3e635;
+      color: #0f0f0f;
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: #888;
+      background: #222;
+    }
+
+    /* Media Upload */
+    .media-upload-area {
+      border: 2px dashed #2a2a2a;
+      border-radius: 8px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1a1a1a;
+    }
+
+    .media-upload-area:hover, .media-upload-area.drag-over {
+      border-color: #a3e635;
+      background: #111f00;
+    }
+
+    .media-upload-area.has-files {
+      border-style: solid;
+      border-color: #3d5a1f;
+      padding: 16px;
+    }
+
+    .upload-icon { font-size: 28px; margin-bottom: 8px; }
+
+    .upload-hint {
+      font-size: 12px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .upload-hint strong { color: #a3e635; }
+
+    .media-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .preview-item {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #111;
+    }
+
+    .preview-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .preview-remove {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.75);
+      color: #ccc;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      line-height: 1;
+      transition: background 0.15s;
+    }
+
+    .preview-remove:hover { background: #ef4444; color: #fff; }
+
+    /* Footer */
+    .footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #333;
+    }
+    
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo"></div>
+      <h1>NextBarrio Parser</h1>
+    </div>
+    <p class="subtitle">Extract listings → Save to Supabase</p>
+    
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-dot" id="claudeStatus"></div>
+        <span>Claude API</span>
+      </div>
+      <div class="status-item">
+        <div class="status-dot" id="supabaseStatus"></div>
+        <span>Supabase</span>
+      </div>
+    </div>
+    
+    <!-- Tab Switcher -->
+    <div class="tab-switcher">
+      <button class="tab-btn active" id="tabUrlBtn" onclick="switchTab('url')">📋 From URL</button>
+      <button class="tab-btn" id="tabMediaBtn" onclick="switchTab('media')">📸 From Media</button>
+    </div>
+
+    <!-- URL Tab -->
+    <div id="urlTab">
+      <div class="section">
+        <div class="section-title">Listing URL</div>
+        <input type="text" id="listingUrl" placeholder="https://idealista.com/inmueble/..." />
+      </div>
+
+      <div class="section">
+        <div class="section-title">Listing Text</div>
+        <textarea id="listingText" placeholder="Paste the full listing page text here..."></textarea>
+        <div class="image-badge empty" id="imageBadge">
+          <span>📷</span>
+          <span id="imageCount">No images</span>
+        </div>
+      </div>
+
+      <div class="section" style="margin-top: 16px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px;">
+          <input type="checkbox" id="updateImagesOnly" style="width: 18px; height: 18px; accent-color: #a3e635;" />
+          <span>Update images only (for existing properties)</span>
+        </label>
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-primary" id="parseBtn" onclick="parseAndSave()">⚡ Parse & Save</button>
+        <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Media Tab -->
+    <div id="mediaTab" style="display:none;">
+      <div class="section">
+        <div class="section-title">Description</div>
+        <textarea id="mediaDescription" placeholder="Describe the property: location, price, size, rooms, features, availability..." style="min-height: 160px;"></textarea>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Photos / Videos <span style="color:#444;">(attached, not analyzed)</span></div>
+        <div class="media-upload-area" id="mediaDropZone" onclick="document.getElementById('mediaFileInput').click()"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleMediaDrop(event)">
+          <input type="file" id="mediaFileInput" accept="image/*,video/*" multiple style="display:none" onchange="handleMediaFiles(this.files)" />
+          <div id="mediaUploadPrompt">
+            <div class="upload-icon">📎</div>
+            <div class="upload-hint">
+              <strong>Click to attach</strong> or drag & drop<br>
+              Photos or videos — stored with the listing
+            </div>
+          </div>
+          <div class="media-preview" id="mediaPreview"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Listing URL <span style="color:#444;">(optional)</span></div>
+        <input type="text" id="mediaUrl" placeholder="https://... (leave blank if no URL)" />
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-primary" id="parseMediaBtn" onclick="parseFromMedia()">⚡ Parse & Save</button>
+        <button class="btn btn-secondary" onclick="clearMediaForm()">Clear</button>
+      </div>
+    </div>
+    
+    <!-- Messages -->
+    <div id="messageArea"></div>
+    
+    <!-- Results -->
+    <div class="results-card" id="resultsCard" style="display: none;">
+      <div class="results-header">
+        <div>
+          <div class="results-title" id="resultsTitle">Listing Extracted</div>
+          <div class="results-subtitle" id="resultsSubtitle"></div>
+        </div>
+      </div>
+      
+      <div class="results-grid" id="resultsGrid"></div>
+      
+      <div class="amenities" id="amenitiesGrid"></div>
+      
+    </div>
+    
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-header" onclick="toggleSettings()">
+        <h3>⚙️ Settings & Bookmarklet</h3>
+        <span class="settings-toggle">▼</span>
+      </div>
+      <div class="settings-content">
+        <div class="settings-row">
+          <label>Claude API Key</label>
+          <input type="password" id="claudeKey" placeholder="Configured on server" disabled />
+        </div>
+        <div class="settings-row">
+          <label>Supabase URL</label>
+          <input type="text" id="supabaseUrl" placeholder="Configured on server" disabled />
+        </div>
+        <div class="settings-row">
+          <label>Supabase Key</label>
+          <input type="password" id="supabaseKey" placeholder="Configured on server" disabled />
+        </div>
+        <div class="button-row">
+          <button class="btn btn-primary btn-small" onclick="saveSettings()">Check Settings</button>
+          <button class="btn btn-secondary btn-small" onclick="fixLegacyData()">Fix Legacy DB Data</button>
+        </div>
+        <div id="fixDataMessage" style="margin-top: 10px;"></div>
+        
+        <div class="bookmarklet-section">
+          <div class="section-title" style="margin-bottom: 12px;">Bookmarklet</div>
+          <a class="bookmarklet-link" id="bookmarklet" href="#" onclick="event.preventDefault(); alert('Drag this to your bookmarks bar!');">
+            📋 Send to NextBarrio
+          </a>
+          <p class="bookmarklet-help">
+            Drag the button above to your bookmarks bar.<br>
+            When on a listing page, click it to auto-fill this form.
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+      <span>NextBarrio © 2025</span>
+      <span>Powered by Claude AI</span>
+    </div>
+  </div>
+
+  <script>
+    let listingImages = [];
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadConfig();
+      checkForBookmarkletData();
+      generateBookmarklet();
+    });
+    
+    // Load saved configuration
+    async function loadConfig() {
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'load' })
+        });
+        const config = await response.json();
+        
+        document.getElementById('claudeStatus').classList.toggle('ok', config.configured);
+        document.getElementById('supabaseStatus').classList.toggle('ok', !!config.supabase_configured);
+
+        if (config.supabase_url) {
+          document.getElementById('supabaseUrl').value = config.supabase_url;
+        }
+        
+        // Open settings if not configured
+        if (!config.configured || !config.supabase_configured) {
+          document.getElementById('settingsPanel').classList.add('open');
+        }
+      } catch (e) {
+        console.error('Failed to load config:', e);
+      }
+    }
+    
+    // Save settings
+    async function saveSettings() {
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'load' })
+        });
+
+        const result = await response.json();
+        document.getElementById('claudeStatus').classList.toggle('ok', result.configured);
+        document.getElementById('supabaseStatus').classList.toggle('ok', !!result.supabase_configured);
+
+        if (result.configured && result.supabase_configured) {
+          showMessage('Settings are configured on the server.', 'success');
+        } else {
+          showMessage('Missing server settings. Add CLAUDE_API_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY in hosting.', 'error');
+        }
+      } catch (e) {
+        showMessage('Failed to check settings: ' + e.message, 'error');
+      }
+    }
+    
+    // Parse and save to Notion
+    async function parseAndSave(forceDuplicate = false) {
+      const url = document.getElementById('listingUrl').value.trim();
+      const text = document.getElementById('listingText').value.trim();
+      const updateImagesOnly = document.getElementById('updateImagesOnly').checked;
+
+      if (updateImagesOnly) {
+        // Update images only mode
+        if (!url) {
+          showMessage('Please provide the listing URL', 'error');
+          return;
+        }
+        if (listingImages.length === 0) {
+          showMessage('No images to update', 'error');
+          return;
+        }
+
+        const btn = document.getElementById('parseBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-text">Updating images...</span>';
+
+        hideMessage();
+
+        try {
+          const response = await fetch('/api/update-images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: url,
+              images: listingImages
+            })
+          });
+
+          const result = await response.json();
+
+          if (result.error) {
+            throw new Error(result.error);
+          }
+
+          if (result.updated_supabase) {
+            showMessage(`✓ Updated ${result.images_count} images for existing property!`, 'success');
+          } else {
+            showMessage('⚠ No property found with that URL. Maybe create new?', 'error');
+          }
+
+        } catch (e) {
+          showMessage('Error: ' + e.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '⚡ Parse & Save';
+        }
+        return;
+      }
+
+      // Normal mode - parse and create new
+      if (!text) {
+        showMessage('Please paste the listing text', 'error');
+        return;
+      }
+
+      // Duplicate check (only if URL is provided and not already forced)
+      if (!forceDuplicate && url) {
+        try {
+          const dupResponse = await fetch('/api/check-duplicate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+          });
+          const dupResult = await dupResponse.json();
+          if (dupResult.is_duplicate) {
+            showDuplicateWarning(dupResult.existing);
+            return;
+          }
+        } catch (e) {
+          // If check fails, proceed normally
+          console.warn('Duplicate check failed:', e);
+        }
+      }
+
+      const btn = document.getElementById('parseBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-text">Processing...</span>';
+
+      hideMessage();
+      document.getElementById('resultsCard').style.display = 'none';
+
+      try {
+        const response = await fetch('/api/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: url,
+            text: text,
+            images: listingImages,
+            title: extractedTitle
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        displayResults(result);
+        showMessage('✓ Saved to Supabase!', 'success');
+
+      } catch (e) {
+        showMessage('Error: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '⚡ Parse & Save';
+      }
+    }
+    
+    // Show duplicate warning with confirm/cancel actions
+    function showDuplicateWarning(existing) {
+      const name = existing && existing.name ? existing.name : 'questa proprietà';
+      const area = document.getElementById('messageArea');
+      area.innerHTML = `
+        <div class="message warning">
+          <strong>⚠ Duplicato rilevato</strong><br>
+          Esiste già un record per questo URL: <em>${name}</em>.<br>
+          Sei sicuro di volerlo creare di nuovo?
+          <div class="warning-actions">
+            <button class="btn btn-primary btn-small" onclick="parseAndSave(true)">Sì, crea duplicato</button>
+            <button class="btn btn-secondary btn-small" onclick="hideMessage()">Annulla</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Display results
+    function displayResults(result) {
+      const data = result.parsed;
+      const card = document.getElementById('resultsCard');
+      
+      // Title
+      document.getElementById('resultsTitle').textContent = data.overall_description || 'Listing Extracted';
+      document.getElementById('resultsSubtitle').textContent = data.address || data.area || '';
+      
+      // Main fields
+      const fields = [
+        { label: 'Type', value: data.property_type, highlight: true },
+        { label: 'Price', value: data.price_month ? `€${data.price_month}/mo` : null, highlight: true },
+        { label: 'Size', value: data.size_m2 ? `${data.size_m2} m²` : null },
+        { label: '€/m²', value: data.price_m2 ? `€${data.price_m2.toFixed(2)}` : null },
+        { label: 'Double Beds', value: data.double_bedrooms },
+        { label: 'Single Beds', value: data.single_bedrooms },
+        { label: 'Available', value: data.availability },
+        { label: 'Source', value: result.parsed.source || null },
+        { label: 'Couples', value: data.admits_couples === true ? 'Yes ✓' : data.admits_couples === false ? 'No ✗' : null },
+        { label: 'Images', value: result.images_count ? `${result.images_count} photos` : '0' }
+      ];
+      
+      const gridHtml = fields.map(f => `
+        <div class="result-item">
+          <label>${f.label}</label>
+          <div class="value ${f.highlight ? 'highlight' : ''} ${f.value === null ? 'muted' : ''}">${f.value ?? '—'}</div>
+        </div>
+      `).join('');
+      
+      document.getElementById('resultsGrid').innerHTML = gridHtml;
+      
+      // Amenities
+      const amenities = [
+        { key: 'terrace', label: 'Terrace' },
+        { key: 'balcony', label: 'Balcony' },
+        { key: 'external', label: 'External' },
+        { key: 'elevator', label: 'Elevator' },
+        { key: 'air_conditioning', label: 'A/C' },
+        { key: 'closets', label: 'Closets' },
+        { key: 'wifi_included', label: 'WiFi' },
+        { key: 'utilities_included', label: 'Utils Incl.' }
+      ];
+      
+      const amenitiesHtml = amenities.map(a => {
+        const value = data[a.key];
+        const cls = value === true ? 'yes' : 'no';
+        const icon = value === true ? '✓' : '✗';
+        return `<span class="amenity ${cls}">${icon} ${a.label}</span>`;
+      }).join('');
+      
+      document.getElementById('amenitiesGrid').innerHTML = amenitiesHtml;
+      
+      
+      card.style.display = 'block';
+    }
+    
+    // Toggle settings panel
+    function toggleSettings() {
+      document.getElementById('settingsPanel').classList.toggle('open');
+    }
+    
+    // Clear form
+    function clearForm() {
+      document.getElementById('listingUrl').value = '';
+      document.getElementById('listingText').value = '';
+      document.getElementById('resultsCard').style.display = 'none';
+      listingImages = [];
+      updateImageBadge();
+      hideMessage();
+    }
+
+    // Tab switching
+    function switchTab(tab) {
+      const urlTab = document.getElementById('urlTab');
+      const mediaTab = document.getElementById('mediaTab');
+      const urlBtn = document.getElementById('tabUrlBtn');
+      const mediaBtn = document.getElementById('tabMediaBtn');
+
+      if (tab === 'url') {
+        urlTab.style.display = '';
+        mediaTab.style.display = 'none';
+        urlBtn.classList.add('active');
+        mediaBtn.classList.remove('active');
+      } else {
+        urlTab.style.display = 'none';
+        mediaTab.style.display = '';
+        urlBtn.classList.remove('active');
+        mediaBtn.classList.add('active');
+      }
+      hideMessage();
+      document.getElementById('resultsCard').style.display = 'none';
+    }
+
+    // Media upload handling
+    let mediaImages = [];
+
+    function handleMediaDrop(event) {
+      event.preventDefault();
+      document.getElementById('mediaDropZone').classList.remove('drag-over');
+      handleMediaFiles(event.dataTransfer.files);
+    }
+
+    function handleMediaFiles(files) {
+      const remaining = 20 - mediaImages.length;
+      const toProcess = Array.from(files).slice(0, remaining);
+
+      toProcess.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const dataUrl = e.target.result;
+          const base64 = dataUrl.split(',')[1];
+          const mediaType = file.type || 'application/octet-stream';
+          const isVideo = mediaType.startsWith('video/');
+          mediaImages.push({ data: base64, media_type: mediaType, preview: isVideo ? null : dataUrl, name: file.name });
+          renderMediaPreviews();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function removeMediaImage(index) {
+      mediaImages.splice(index, 1);
+      renderMediaPreviews();
+    }
+
+    function renderMediaPreviews() {
+      const preview = document.getElementById('mediaPreview');
+      const prompt = document.getElementById('mediaUploadPrompt');
+      const zone = document.getElementById('mediaDropZone');
+
+      if (mediaImages.length === 0) {
+        prompt.style.display = '';
+        preview.innerHTML = '';
+        zone.classList.remove('has-files');
+        return;
+      }
+
+      prompt.style.display = 'none';
+      zone.classList.add('has-files');
+      preview.innerHTML = mediaImages.map((img, i) => img.preview ? `
+        <div class="preview-item">
+          <img src="${img.preview}" alt="Photo ${i + 1}" />
+          <button class="preview-remove" onclick="event.stopPropagation(); removeMediaImage(${i})">✕</button>
+        </div>
+      ` : `
+        <div class="preview-item" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px;">
+          <span style="font-size:22px;">🎬</span>
+          <span style="font-size:9px;color:#888;word-break:break-all;text-align:center;line-height:1.3;">${img.name || 'video'}</span>
+          <button class="preview-remove" style="position:static;margin-top:2px;" onclick="event.stopPropagation(); removeMediaImage(${i})">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function clearMediaForm() {
+      mediaImages = [];
+      document.getElementById('mediaDescription').value = '';
+      document.getElementById('mediaUrl').value = '';
+      document.getElementById('mediaFileInput').value = '';
+      renderMediaPreviews();
+      hideMessage();
+      document.getElementById('resultsCard').style.display = 'none';
+    }
+
+    // Parse from media + description
+    async function parseFromMedia() {
+      const description = document.getElementById('mediaDescription').value.trim();
+      const url = document.getElementById('mediaUrl').value.trim();
+
+      if (mediaImages.length === 0 && !description) {
+        showMessage('Please upload at least one photo or add a description', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('parseMediaBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-text">Processing...</span>';
+      hideMessage();
+      document.getElementById('resultsCard').style.display = 'none';
+
+      try {
+        const response = await fetch('/api/parse-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            images: mediaImages.map(({ data, media_type }) => ({ data, media_type })),
+            description,
+            url
+          })
+        });
+
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+
+        displayResults(result);
+        if (result.saved_to_supabase === false) {
+          showMessage('⚠ Parsed but NOT saved: ' + (result.supabase_error || 'unknown error'), 'error');
+        } else {
+          showMessage('✓ Saved to Supabase!', 'success');
+        }
+
+      } catch (e) {
+        showMessage('Error: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '⚡ Parse & Save';
+      }
+    }
+    
+    // Show/hide messages
+    function showMessage(text, type) {
+      const area = document.getElementById('messageArea');
+      area.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+    
+    function hideMessage() {
+      document.getElementById('messageArea').innerHTML = '';
+    }
+    
+    // Update image badge
+    function updateImageBadge() {
+      const badge = document.getElementById('imageBadge');
+      const count = document.getElementById('imageCount');
+      
+      if (listingImages.length > 0) {
+        badge.classList.remove('empty');
+        count.textContent = `${listingImages.length} images captured`;
+      } else {
+        badge.classList.add('empty');
+        count.textContent = 'No images';
+      }
+    }
+    
+    // Check for bookmarklet data in URL
+    let extractedTitle = '';
+    
+    function checkForBookmarkletData() {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith('#data=')) {
+        try {
+          const encoded = hash.substring(6);
+          const data = JSON.parse(decodeURIComponent(encoded));
+          
+          if (data.url) {
+            document.getElementById('listingUrl').value = data.url;
+          }
+          if (data.text) {
+            document.getElementById('listingText').value = data.text;
+          }
+          if (data.images && data.images.length > 0) {
+            listingImages = data.images;
+            updateImageBadge();
+          }
+          if (data.title) {
+            extractedTitle = data.title;
+          }
+          
+          // Clear hash
+          history.replaceState(null, '', window.location.pathname);
+          
+        } catch (e) {
+          console.error('Failed to parse bookmarklet data:', e);
+        }
+      }
+    }
+    
+    // Fix legacy data in Supabase
+    async function fixLegacyData() {
+      const msgEl = document.getElementById('fixDataMessage');
+      msgEl.innerHTML = '<span style="color:#666;font-size:12px;">Running fix...</span>';
+
+      try {
+        const response = await fetch('/api/fix-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const result = await response.json();
+
+        if (result.error) throw new Error(result.error);
+
+        const lines = [
+          `✓ Fixed ${result.fixed_types} property_type values (long term → long_term)`,
+          `✓ Backfilled parsed_at for ${result.fixed_dates} rows`
+        ];
+        if (result.errors && result.errors.length > 0) {
+          lines.push(`⚠ ${result.errors.length} error(s): ${result.errors.join('; ')}`);
+        }
+        msgEl.innerHTML = `<div class="message success" style="font-size:12px;">${lines.join('<br>')}</div>`;
+      } catch (e) {
+        msgEl.innerHTML = `<div class="message error" style="font-size:12px;">Error: ${e.message}</div>`;
+      }
+    }
+
+    // Generate bookmarklet
+    function generateBookmarklet() {
+      const parserUrl = window.location.origin;
+      
+      // Bookmarklet code that extracts URL, text, images, and title
+      const code = `javascript:(function(){
+        var url=location.href;
+        var text=document.body.innerText.substring(0,20000);
+        var images=[];
+        var title='';
+        
+        /* Extract title */
+        var titleEl=document.querySelector('h1.main-info__title-main')||document.querySelector('h1[class*="title"]')||document.querySelector('.property-title h1')||document.querySelector('h1');
+        if(titleEl)title=titleEl.innerText.trim().substring(0,200);
+        
+        /* Extract images - Special handling for Idealista */
+        if(url.includes('idealista.com')){
+          var scriptText=[...document.querySelectorAll('script')].map(function(s){return s.innerText;}).join('');
+          var matches=scriptText.match(/img[34]\\.idealista\\.com\\/blur\\/[^"'\\s]+\\.jpg/g)||[];
+          var seen={};
+          matches.forEach(function(m){
+            var imgId=m.match(/\\/(\\d+)\\.jpg$/);
+            if(imgId&&!seen[imgId[1]]&&images.length<20){
+              seen[imgId[1]]=true;
+              var full='https://'+m.replace(/WEB_DETAIL[^/]*/, 'WEB_DETAIL');
+              images.push(full);
+            }
+          });
+        }
+
+        /* Extract images from img elements for other sites */
+        document.querySelectorAll('img, picture source, [data-src], [data-lazy], [data-original]').forEach(function(el){
+          var src=el.src||el.dataset.src||el.dataset.lazy||el.dataset.original||el.getAttribute('srcset')||'';
+          if(src.includes(','))src=src.split(',')[0].trim().split(' ')[0];
+          if(!src||!src.startsWith('http'))return;
+
+          var dominated=src.toLowerCase();
+          if(dominated.includes('flag')||dominated.includes('icon')||dominated.includes('logo')||dominated.includes('avatar')||dominated.includes('sprite')||dominated.includes('static/img')||dominated.includes('assets')||dominated.includes('widget'))return;
+          if(dominated.includes('.svg')||dominated.includes('1x1')||dominated.includes('pixel')||dominated.includes('blank'))return;
+
+          var isListingPhoto=false;
+
+          /* Fotocasa: static.fotocasa.es/images/ads/ */
+          if(dominated.includes('static.fotocasa.es/images/ads/')){isListingPhoto=true;}
+
+          /* Other sites */
+          if(dominated.includes('badi')&&dominated.includes('photo')){isListingPhoto=true;}
+          if(dominated.includes('pisos.com')&&dominated.includes('/foto')){isListingPhoto=true;}
+          if(dominated.includes('habitaclia')&&dominated.includes('/foto')){isListingPhoto=true;}
+          if(dominated.includes('locabarcelona')){isListingPhoto=true;}
+          if(dominated.includes('atemporal')){isListingPhoto=true;}
+          if(dominated.includes('cloudfront')&&(dominated.includes('/properties/')||dominated.includes('/listing'))){isListingPhoto=true;}
+          if(dominated.includes('amazonaws')&&(dominated.includes('/listing')||dominated.includes('/property'))){isListingPhoto=true;}
+
+          if(isListingPhoto&&images.length<20){
+            /* Try to get higher resolution */
+            var bigSrc=src;
+            if(src.includes('fotocasa.es')){bigSrc=src.replace(/rule=web_[^&]+/,'rule=web_1200x0_ar');}
+            if(images.indexOf(bigSrc)===-1)images.push(bigSrc);
+          }
+        });
+        
+        /* Fallback: grab large images if none found */
+        if(images.length===0){
+          document.querySelectorAll('img').forEach(function(img){
+            if(img.naturalWidth>300&&img.naturalHeight>200&&images.length<15){
+              var src=img.src;
+              if(src&&src.startsWith('http')&&!src.includes('logo')&&!src.includes('icon')&&!src.includes('flag')&&!src.includes('avatar')&&!src.includes('static/img')){
+                if(images.indexOf(src)===-1)images.push(src);
+              }
+            }
+          });
+        }
+        
+        var data=encodeURIComponent(JSON.stringify({url:url,text:text,images:images,title:title}));
+        window.open('${parserUrl}#data='+data,'_blank');
+      })();`;
+      
+      document.getElementById('bookmarklet').href = code.replace(/\s+/g, ' ');
+    }
+  </script>
+</body>
+</html>

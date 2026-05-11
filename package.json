@@ -1,0 +1,15 @@
+{
+  "name": "nextbarrio-parser",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "vercel": "^48.0.0"
+  }
+}

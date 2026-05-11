@@ -1,0 +1,9 @@
+.DS_Store
+.vercel
+node_modules
+config.json
+__pycache__
+*.pyc
+.claude
+Start NextBarrio Parser.command
+\[NEW\] *** Start NextBarrio Parser.app

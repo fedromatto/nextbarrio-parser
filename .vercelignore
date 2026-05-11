@@ -1,0 +1,8 @@
+.DS_Store
+.claude
+__pycache__
+*.pyc
+config.json
+Start NextBarrio Parser.command
+[NEW] *** Start NextBarrio Parser.app
+
