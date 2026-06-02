@@ -133,7 +133,7 @@ async function callClaude({ apiKey, listingText, listingUrl = "" }) {
 Return ONLY valid JSON with these fields (use null if not found):
 {
   "listing_type": "flat" or "room",
-  "property_type": "temporal" or "long_term",
+  "property_type": "long_term", "temporal", or "vacacional",
   "address": "string",
   "area_parsed": "raw neighbourhood/district string exactly as written in the listing",
   "sub_area": "raw neighbourhood/district string exactly as written in the listing",
@@ -167,6 +167,9 @@ IMPORTANT:
 - For rooms in shared flats, count the room being rented.
 - Preserve the raw neighbourhood/district text in area_parsed.
 - Map neighbourhoods to the closest canonical area and macro_area when possible.
+- Classify property_type as "vacacional" when the listing explicitly says vacation/leisure use, for example "vacacional", "vacaciones", "ocio/vacacional", or "uso exclusivo vacaciones/ocio".
+- Classify property_type as "temporal" for seasonal/temporary residential rentals that are not vacation/leisure use, especially when the text refers to an accredited temporary cause such as studies, work, medical treatment, relocation, or "causa temporal".
+- Classify property_type as "long_term" for habitual residence or long-stay rentals.
 
 Listing URL: ${listingUrl || "Not provided"}
 

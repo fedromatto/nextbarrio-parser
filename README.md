@@ -59,7 +59,7 @@ chmod +x "Start NextBarrio Parser.command"
 
 Make sure your Notion database has these columns:
 - Name (title) - auto-filled with description
-- Property type (select: temporal, long term)
+- Property type (select: long_term, temporal, vacacional)
 - Address (text)
 - Status (select: to contact, waiting for reply, etc.)
 - Area (text)
