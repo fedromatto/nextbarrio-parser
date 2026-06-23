@@ -745,6 +745,29 @@
         showMessage('Failed to check settings: ' + e.message, 'error');
       }
     }
+
+    async function readApiResult(response) {
+      const contentType = response.headers.get('content-type') || '';
+      const raw = await response.text();
+      let result = {};
+
+      if (raw && contentType.includes('application/json')) {
+        try {
+          result = JSON.parse(raw);
+        } catch (e) {
+          throw new Error(`Server returned invalid JSON (${response.status})`);
+        }
+      } else if (raw) {
+        result = { error: raw.replace(/\s+/g, ' ').trim() };
+      }
+
+      if (!response.ok) {
+        const details = result.error || response.statusText || 'Request failed';
+        throw new Error(`${details} (${response.status})`);
+      }
+
+      return result;
+    }
     
     // Parse and save to Notion
     async function parseAndSave(forceDuplicate = false) {
@@ -844,7 +867,7 @@
           })
         });
 
-        const result = await response.json();
+        const result = await readApiResult(response);
 
         if (result.error) {
           throw new Error(result.error);
@@ -1073,7 +1096,7 @@
           })
         });
 
-        const result = await response.json();
+        const result = await readApiResult(response);
         if (result.error) throw new Error(result.error);
 
         displayResults(result);
@@ -1094,7 +1117,10 @@
     // Show/hide messages
     function showMessage(text, type) {
       const area = document.getElementById('messageArea');
-      area.innerHTML = `<div class="message ${type}">${text}</div>`;
+      const message = document.createElement('div');
+      message.className = `message ${type}`;
+      message.textContent = text;
+      area.replaceChildren(message);
     }
     
     function hideMessage() {

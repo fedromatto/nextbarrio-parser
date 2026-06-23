@@ -1,3 +1,6 @@
+const fs = require("fs");
+const path = require("path");
+
 const MACRO_AREAS = [
   "Ciutat Vella",
   "Eixample",
@@ -75,11 +78,22 @@ const SOURCE_PATTERNS = [
 ];
 
 function getEnv() {
+  const localConfig = readLocalConfig();
+
   return {
-    claudeApiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || "",
-    supabaseUrl: normalizeSupabaseUrl(process.env.SUPABASE_URL || ""),
-    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || ""
+    claudeApiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || localConfig.claude_api_key || "",
+    supabaseUrl: normalizeSupabaseUrl(process.env.SUPABASE_URL || localConfig.supabase_url || ""),
+    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || localConfig.supabase_service_role_key || localConfig.supabase_key || ""
   };
+}
+
+function readLocalConfig() {
+  const configPath = path.join(__dirname, "..", "config.json");
+  try {
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (error) {
+    return {};
+  }
 }
 
 function normalizeSupabaseUrl(url) {
@@ -190,7 +204,7 @@ ${listingText}`;
     })
   });
 
-  const result = await response.json();
+  const result = await readResponseJson(response, "Claude");
   if (!response.ok) {
     throw new Error(result.error?.message || `Claude API error: ${response.status}`);
   }
@@ -199,6 +213,18 @@ ${listingText}`;
   const jsonMatch = responseText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("Could not parse Claude response as JSON");
   return JSON.parse(jsonMatch[0]);
+}
+
+async function readResponseJson(response, serviceName) {
+  const text = await response.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 300);
+    throw new Error(`${serviceName} returned a non-JSON response (${response.status}): ${preview || "empty response"}`);
+  }
 }
 
 function buildSupabaseRow({ parsed, url, images = [], title = "", source = null }) {
@@ -355,8 +381,7 @@ async function supabaseFetch(path, { method = "GET", body, prefer } = {}) {
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = await readResponseJson(response, "Supabase");
   if (!response.ok) {
     throw new Error(data?.message || data?.error || `Supabase error: ${response.status}`);
   }
