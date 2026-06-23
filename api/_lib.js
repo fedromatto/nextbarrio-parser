@@ -110,6 +110,11 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendError(res, error) {
+  const status = Number.isInteger(error.statusCode) ? error.statusCode : 500;
+  sendJson(res, status, { error: error.message });
+}
+
 function requirePost(req, res) {
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
@@ -190,6 +195,41 @@ Listing URL: ${listingUrl || "Not provided"}
 Listing text:
 ${listingText}`;
 
+  const result = await fetchClaudeWithRetry({ apiKey, prompt });
+
+  const responseText = result.content?.map(part => part.text || "").join("\n") || "";
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Could not parse Claude response as JSON");
+  return JSON.parse(jsonMatch[0]);
+}
+
+async function fetchClaudeWithRetry({ apiKey, prompt }) {
+  const maxAttempts = Number(process.env.CLAUDE_MAX_ATTEMPTS || 2);
+  const models = uniqueValues([
+    process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+    process.env.CLAUDE_FALLBACK_MODEL || "claude-haiku-4-5"
+  ]);
+  let lastError = null;
+
+  for (const model of models) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const result = await fetchClaude({ apiKey, prompt, model });
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (!isRetryableClaudeError(error) || attempt === maxAttempts) break;
+        await wait(500 * attempt * attempt);
+      }
+    }
+
+    if (!isRetryableClaudeError(lastError)) break;
+  }
+
+  throw lastError;
+}
+
+async function fetchClaude({ apiKey, prompt, model }) {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -198,7 +238,7 @@ ${listingText}`;
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+      model,
       max_tokens: 2000,
       messages: [{ role: "user", content: prompt }]
     })
@@ -206,13 +246,12 @@ ${listingText}`;
 
   const result = await readResponseJson(response, "Claude");
   if (!response.ok) {
-    throw new Error(result.error?.message || `Claude API error: ${response.status}`);
+    const message = result.error?.message || `Claude API error: ${response.status}`;
+    const statusCode = isRetryableClaudeResponse(response, result) ? 503 : response.status;
+    throw createError(message, statusCode, { model, upstreamStatus: response.status, type: result.error?.type });
   }
 
-  const responseText = result.content?.map(part => part.text || "").join("\n") || "";
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Could not parse Claude response as JSON");
-  return JSON.parse(jsonMatch[0]);
+  return result;
 }
 
 async function readResponseJson(response, serviceName) {
@@ -223,8 +262,34 @@ async function readResponseJson(response, serviceName) {
     return JSON.parse(text);
   } catch (error) {
     const preview = text.replace(/\s+/g, " ").trim().slice(0, 300);
-    throw new Error(`${serviceName} returned a non-JSON response (${response.status}): ${preview || "empty response"}`);
+    const message = `${serviceName} returned a non-JSON response (${response.status}): ${preview || "empty response"}`;
+    const statusCode = response.status >= 500 ? 503 : response.status;
+    throw createError(message, statusCode, { upstreamStatus: response.status });
   }
+}
+
+function createError(message, statusCode, extra = {}) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  Object.assign(error, extra);
+  return error;
+}
+
+function isRetryableClaudeError(error) {
+  return error.statusCode === 503 || error.upstreamStatus === 429;
+}
+
+function isRetryableClaudeResponse(response, result) {
+  const message = String(result.error?.message || "").toLowerCase();
+  return response.status === 429 || response.status >= 500 || result.error?.type === "overloaded_error" || message.includes("overloaded");
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function buildSupabaseRow({ parsed, url, images = [], title = "", source = null }) {
@@ -453,6 +518,7 @@ module.exports = {
   normalizeLocation,
   readJson,
   requirePost,
+  sendError,
   saveToSupabase,
   sendJson,
   supabaseFetch,

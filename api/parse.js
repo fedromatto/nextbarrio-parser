@@ -1,4 +1,4 @@
-const { callClaude, getEnv, readJson, requirePost, saveToSupabase, sendJson } = require("./_lib");
+const { callClaude, getEnv, readJson, requirePost, saveToSupabase, sendError, sendJson } = require("./_lib");
 
 module.exports = async function handler(req, res) {
   if (!requirePost(req, res)) return;
@@ -37,6 +37,6 @@ module.exports = async function handler(req, res) {
       supabase_error: supabaseError
     });
   } catch (error) {
-    sendJson(res, 500, { error: error.message });
+    sendError(res, error);
   }
 };
