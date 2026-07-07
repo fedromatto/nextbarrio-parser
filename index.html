@@ -519,6 +519,58 @@
 
     .preview-remove:hover { background: #ef4444; color: #fff; }
 
+    /* Parsed image preview (URL tab) */
+    .image-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .image-preview-grid .preview-item {
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+
+    .image-preview-grid .preview-item:hover { border-color: #a3e635; }
+
+    .image-preview-grid .preview-item.deselected img {
+      opacity: 0.2;
+      filter: grayscale(1);
+    }
+
+    .image-preview-grid .preview-item.deselected::after {
+      content: '✕';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ef4444;
+      font-size: 22px;
+      pointer-events: none;
+    }
+
+    .image-preview-grid .preview-item.broken img { display: none; }
+
+    .image-preview-grid .preview-item.broken::before {
+      content: '⚠';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 18px;
+    }
+
+    .image-preview-hint {
+      font-size: 11px;
+      color: #555;
+      margin-top: 8px;
+    }
+
     /* Footer */
     .footer {
       margin-top: 48px;
@@ -573,6 +625,8 @@
           <span>📷</span>
           <span id="imageCount">No images</span>
         </div>
+        <div class="image-preview-grid" id="imagePreviewGrid"></div>
+        <div class="image-preview-hint" id="imagePreviewHint" style="display:none;">Clicca su un'immagine per escluderla dal salvataggio</div>
       </div>
 
       <div class="section" style="margin-top: 16px;">
@@ -688,7 +742,36 @@
   </div>
 
   <script>
-    let listingImages = [];
+    let listingImages = []; // [{ url, selected }]
+
+    function setListingImages(urls) {
+      listingImages = (urls || []).map(url => ({ url, selected: true }));
+      renderListingImages();
+    }
+
+    function selectedImageUrls() {
+      return listingImages.filter(img => img.selected).map(img => img.url);
+    }
+
+    function toggleListingImage(index) {
+      listingImages[index].selected = !listingImages[index].selected;
+      renderListingImages();
+    }
+
+    function renderListingImages() {
+      const grid = document.getElementById('imagePreviewGrid');
+      const hint = document.getElementById('imagePreviewHint');
+
+      grid.innerHTML = listingImages.map((img, i) => `
+        <div class="preview-item ${img.selected ? '' : 'deselected'}" onclick="toggleListingImage(${i})" title="${img.url}">
+          <img src="${img.url}" alt="Image ${i + 1}" loading="lazy" referrerpolicy="no-referrer"
+               onerror="this.parentElement.classList.add('broken')" />
+        </div>
+      `).join('');
+
+      hint.style.display = listingImages.length > 0 ? '' : 'none';
+      updateImageBadge();
+    }
     
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', () => {
@@ -775,13 +858,15 @@
       const text = document.getElementById('listingText').value.trim();
       const updateImagesOnly = document.getElementById('updateImagesOnly').checked;
 
+      const imagesToSend = selectedImageUrls();
+
       if (updateImagesOnly) {
         // Update images only mode
         if (!url) {
           showMessage('Please provide the listing URL', 'error');
           return;
         }
-        if (listingImages.length === 0) {
+        if (imagesToSend.length === 0) {
           showMessage('No images to update', 'error');
           return;
         }
@@ -798,7 +883,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               url: url,
-              images: listingImages
+              images: imagesToSend
             })
           });
 
@@ -862,7 +947,7 @@
           body: JSON.stringify({
             url: url,
             text: text,
-            images: listingImages,
+            images: imagesToSend,
             title: extractedTitle
           })
         });
@@ -972,8 +1057,7 @@
       document.getElementById('listingUrl').value = '';
       document.getElementById('listingText').value = '';
       document.getElementById('resultsCard').style.display = 'none';
-      listingImages = [];
-      updateImageBadge();
+      setListingImages([]);
       hideMessage();
     }
 
@@ -1131,10 +1215,13 @@
     function updateImageBadge() {
       const badge = document.getElementById('imageBadge');
       const count = document.getElementById('imageCount');
-      
+      const selected = selectedImageUrls().length;
+
       if (listingImages.length > 0) {
         badge.classList.remove('empty');
-        count.textContent = `${listingImages.length} images captured`;
+        count.textContent = selected === listingImages.length
+          ? `${listingImages.length} images captured`
+          : `${selected} of ${listingImages.length} images selected`;
       } else {
         badge.classList.add('empty');
         count.textContent = 'No images';
@@ -1158,8 +1245,7 @@
             document.getElementById('listingText').value = data.text;
           }
           if (data.images && data.images.length > 0) {
-            listingImages = data.images;
-            updateImageBadge();
+            setListingImages(data.images);
           }
           if (data.title) {
             extractedTitle = data.title;
@@ -1212,70 +1298,98 @@
         var text=document.body.innerText.substring(0,20000);
         var images=[];
         var title='';
-        
+        var MAX=20;
+        var EXCLUDE='[class*="similar"],[class*="related"],[class*="recommend"],aside,footer,nav,header';
+        var seen={};
+
         /* Extract title */
         var titleEl=document.querySelector('h1.main-info__title-main')||document.querySelector('h1[class*="title"]')||document.querySelector('.property-title h1')||document.querySelector('h1');
         if(titleEl)title=titleEl.innerText.trim().substring(0,200);
-        
-        /* Extract images - Special handling for Idealista */
+
+        /* Dedup key: strip WordPress size suffix (-488x326.jpg -> .jpg) */
+        function baseKey(u){return u.split('?')[0].replace(/-\\d+x\\d+(\\.[a-z]+)$/i,'$1');}
+        function addImage(u){
+          if(!u)return;
+          u=String(u).trim();
+          if(u.indexOf('//')===0)u=location.protocol+u;
+          if(!/^https?:/i.test(u))return;
+          var low=u.toLowerCase();
+          if(/(flag|icon|logo|avatar|sprite|widget|\\.svg|1x1|pixel|blank|placeholder)/.test(low))return;
+          if(low.includes('static/img')||low.includes('/assets/'))return;
+          var key=baseKey(u);
+          if(seen[key]!==undefined){
+            /* prefer the original full-size version over a resized variant */
+            if(u.split('?')[0]===key)images[seen[key]]=u;
+            return;
+          }
+          if(images.length>=MAX)return;
+          seen[key]=images.length;
+          images.push(u);
+        }
+        function isExcluded(el){return !!(el.closest&&el.closest(EXCLUDE));}
+
+        /* 1. Idealista: gallery urls live in scripts */
         if(url.includes('idealista.com')){
           var scriptText=[...document.querySelectorAll('script')].map(function(s){return s.innerText;}).join('');
           var matches=scriptText.match(/img[34]\\.idealista\\.com\\/blur\\/[^"'\\s]+\\.jpg/g)||[];
-          var seen={};
           matches.forEach(function(m){
-            var imgId=m.match(/\\/(\\d+)\\.jpg$/);
-            if(imgId&&!seen[imgId[1]]&&images.length<20){
-              seen[imgId[1]]=true;
-              var full='https://'+m.replace(/WEB_DETAIL[^/]*/, 'WEB_DETAIL');
-              images.push(full);
+            addImage('https://'+m.replace(/WEB_DETAIL[^/]*/, 'WEB_DETAIL'));
+          });
+        }
+
+        /* 2. Main gallery: lightbox anchors (swipebox/fancybox/etc.) pointing to full-size photos */
+        document.querySelectorAll('a.swipebox,a[data-swipebox-rel],a[data-fancybox],a[data-lightbox],a[rel*="lightbox"],[class*="property-images"] a,[class*="gallery"] a').forEach(function(a){
+          if(isExcluded(a))return;
+          var href=a.getAttribute('href')||'';
+          if(/\\.(jpe?g|png|webp|avif)(\\?|$)/i.test(href))addImage(href);
+        });
+
+        /* 2b. Lazy background-image divs (WP Rocket etc.) */
+        document.querySelectorAll('[data-bg],[data-background],[data-background-image]').forEach(function(el){
+          if(isExcluded(el))return;
+          addImage(el.getAttribute('data-bg')||el.getAttribute('data-background')||el.getAttribute('data-background-image'));
+        });
+
+        /* 3. Site-specific img scan, only if gallery scan found little */
+        if(images.length<3){
+          document.querySelectorAll('img, picture source, [data-src], [data-lazy], [data-original]').forEach(function(el){
+            if(isExcluded(el))return;
+            var src=el.src||el.dataset.src||el.dataset.lazy||el.dataset.original||el.getAttribute('srcset')||'';
+            if(src.includes(','))src=src.split(',')[0].trim().split(' ')[0];
+            if(!src||!src.startsWith('http'))return;
+
+            var dominated=src.toLowerCase();
+            var isListingPhoto=false;
+
+            /* Fotocasa: static.fotocasa.es/images/ads/ */
+            if(dominated.includes('static.fotocasa.es/images/ads/')){isListingPhoto=true;}
+
+            /* Other sites */
+            if(dominated.includes('badi')&&dominated.includes('photo')){isListingPhoto=true;}
+            if(dominated.includes('pisos.com')&&dominated.includes('/foto')){isListingPhoto=true;}
+            if(dominated.includes('habitaclia')&&dominated.includes('/foto')){isListingPhoto=true;}
+            if(dominated.includes('locabarcelona')){isListingPhoto=true;}
+            if(dominated.includes('atemporal')){isListingPhoto=true;}
+            if(dominated.includes('cloudfront')&&(dominated.includes('/properties/')||dominated.includes('/listing'))){isListingPhoto=true;}
+            if(dominated.includes('amazonaws')&&(dominated.includes('/listing')||dominated.includes('/property'))){isListingPhoto=true;}
+
+            if(isListingPhoto){
+              /* Try to get higher resolution */
+              var bigSrc=src;
+              if(src.includes('fotocasa.es')){bigSrc=src.replace(/rule=web_[^&]+/,'rule=web_1200x0_ar');}
+              addImage(bigSrc);
             }
           });
         }
 
-        /* Extract images from img elements for other sites */
-        document.querySelectorAll('img, picture source, [data-src], [data-lazy], [data-original]').forEach(function(el){
-          var src=el.src||el.dataset.src||el.dataset.lazy||el.dataset.original||el.getAttribute('srcset')||'';
-          if(src.includes(','))src=src.split(',')[0].trim().split(' ')[0];
-          if(!src||!src.startsWith('http'))return;
-
-          var dominated=src.toLowerCase();
-          if(dominated.includes('flag')||dominated.includes('icon')||dominated.includes('logo')||dominated.includes('avatar')||dominated.includes('sprite')||dominated.includes('static/img')||dominated.includes('assets')||dominated.includes('widget'))return;
-          if(dominated.includes('.svg')||dominated.includes('1x1')||dominated.includes('pixel')||dominated.includes('blank'))return;
-
-          var isListingPhoto=false;
-
-          /* Fotocasa: static.fotocasa.es/images/ads/ */
-          if(dominated.includes('static.fotocasa.es/images/ads/')){isListingPhoto=true;}
-
-          /* Other sites */
-          if(dominated.includes('badi')&&dominated.includes('photo')){isListingPhoto=true;}
-          if(dominated.includes('pisos.com')&&dominated.includes('/foto')){isListingPhoto=true;}
-          if(dominated.includes('habitaclia')&&dominated.includes('/foto')){isListingPhoto=true;}
-          if(dominated.includes('locabarcelona')){isListingPhoto=true;}
-          if(dominated.includes('atemporal')){isListingPhoto=true;}
-          if(dominated.includes('cloudfront')&&(dominated.includes('/properties/')||dominated.includes('/listing'))){isListingPhoto=true;}
-          if(dominated.includes('amazonaws')&&(dominated.includes('/listing')||dominated.includes('/property'))){isListingPhoto=true;}
-
-          if(isListingPhoto&&images.length<20){
-            /* Try to get higher resolution */
-            var bigSrc=src;
-            if(src.includes('fotocasa.es')){bigSrc=src.replace(/rule=web_[^&]+/,'rule=web_1200x0_ar');}
-            if(images.indexOf(bigSrc)===-1)images.push(bigSrc);
-          }
-        });
-        
-        /* Fallback: grab large images if none found */
+        /* 4. Fallback: grab large visible images if none found */
         if(images.length===0){
           document.querySelectorAll('img').forEach(function(img){
-            if(img.naturalWidth>300&&img.naturalHeight>200&&images.length<15){
-              var src=img.src;
-              if(src&&src.startsWith('http')&&!src.includes('logo')&&!src.includes('icon')&&!src.includes('flag')&&!src.includes('avatar')&&!src.includes('static/img')){
-                if(images.indexOf(src)===-1)images.push(src);
-              }
-            }
+            if(isExcluded(img))return;
+            if(img.naturalWidth>300&&img.naturalHeight>200)addImage(img.src);
           });
         }
-        
+
         var data=encodeURIComponent(JSON.stringify({url:url,text:text,images:images,title:title}));
         window.open('${parserUrl}#data='+data,'_blank');
       })();`;
