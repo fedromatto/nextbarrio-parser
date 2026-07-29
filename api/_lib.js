@@ -292,10 +292,24 @@ function uniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function toRoundedInteger(value) {
+  const number = toFiniteNumber(value);
+  return number === null ? null : Math.round(number);
+}
+
 function buildSupabaseRow({ parsed, url, images = [], title = "", source = null }) {
-  const priceMonth = parsed.price_month ?? null;
-  const sizeM2 = parsed.size_m2 ?? null;
-  const calculatedPriceM2 = priceMonth && sizeM2 ? Number((priceMonth / sizeM2).toFixed(2)) : parsed.price_m2 ?? null;
+  const priceMonth = toRoundedInteger(parsed.price_month);
+  const sizeM2 = toFiniteNumber(parsed.size_m2);
+  const priceM2 = toFiniteNumber(parsed.price_m2);
+  const calculatedPriceM2 = priceMonth !== null && sizeM2 ? Number((priceMonth / sizeM2).toFixed(2)) : priceM2;
+  const singleBedrooms = toRoundedInteger(parsed.single_bedrooms);
+  const doubleBedrooms = toRoundedInteger(parsed.double_bedrooms);
   const location = normalizeLocation(parsed);
 
   return {
@@ -318,10 +332,10 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
     price_month: priceMonth,
     size_m2: sizeM2,
     price_m2: calculatedPriceM2,
-    single_rooms: parsed.single_bedrooms ?? null,
-    single_bedrooms: parsed.single_bedrooms ?? null,
-    double_rooms: parsed.double_bedrooms ?? null,
-    double_bedrooms: parsed.double_bedrooms ?? null,
+    single_rooms: singleBedrooms,
+    single_bedrooms: singleBedrooms,
+    double_rooms: doubleBedrooms,
+    double_bedrooms: doubleBedrooms,
     terrace: parsed.terrace ?? false,
     external: parsed.external ?? false,
     balcony: parsed.balcony ?? false,
@@ -457,6 +471,14 @@ async function saveToSupabase({ parsed, url, images, title }) {
   const source = getSourceFromUrl(url);
   if (source) parsed.source = source;
   const row = buildSupabaseRow({ parsed, url, images, title, source });
+  Object.assign(parsed, {
+    ...(source ? { source } : {}),
+    price_month: row.price_month,
+    size_m2: row.size_m2,
+    price_m2: row.price_m2,
+    single_bedrooms: row.single_bedrooms,
+    double_bedrooms: row.double_bedrooms
+  });
   const result = await insertSupabaseRow(row);
   return Array.isArray(result) ? result[0] : result;
 }
