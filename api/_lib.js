@@ -325,6 +325,8 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
     macro_area: location.macroArea,
     area: location.area,
     area_parsed: location.areaParsed,
+    district: location.macroArea || "Unknown",
+    barrio: canonicalBarrio(location.area || location.areaParsed) || "Unknown",
     sub_area: location.areaParsed,
     availability: parsed.availability ?? null,
     available_from: parsed.availability_date ?? null,
@@ -422,6 +424,18 @@ function findAreaRule(value, exactOnly) {
 function canonicalize(value, allowedValues) {
   const normalized = normalizeText(value);
   return allowedValues.find(allowedValue => normalizeText(allowedValue) === normalized) || null;
+}
+
+function canonicalBarrio(value) {
+  const aliases = {
+    "Gothic Quarter": "Barri Gotic",
+    "Gràcia": "Vila de Gracia",
+    "Sarrià-Sant Gervasi": "Sarrià",
+    "Bordeta": "la Bordeta",
+    "Salut": "la Salut",
+    "Clot": "el Clot"
+  };
+  return aliases[value] || value || null;
 }
 
 function normalizeText(value) {
