@@ -39,6 +39,47 @@ const SUBAREAS = [
   "Badalona"
 ];
 
+const BARRIOS_BY_DISTRICT = {
+  "Ciutat Vella": ["El Raval", "Barri Gotic", "Barceloneta", "El Born"],
+  "Eixample": ["Dreta de l'Eixample", "Antiga Esquerra de l'Eixample", "Nova Esquerra de l'Eixample", "Fort Pienc", "Sagrada Família", "Sant Antoni"],
+  "Gràcia": ["Vila de Gracia", "Camp d'en Grassot i Gràcia Nova", "la Salut", "Vallcarca i els Penitents", "Coll"],
+  "Sants-Montjuïc": ["Poble-sec", "Marina del Prat Vermell", "Marina de Port", "Font de la Guatlla", "Hostafrancs", "la Bordeta", "Sants - Badal", "Sants"],
+  "Les Corts": ["Les Corts", "Maternitat i Sant Ramon", "Pedralbes"],
+  "Sarrià-Sant Gervasi": ["Vallvidrera, el Tibidabo i les Planes", "Sarrià", "Tres Torres", "Sant Gervasi - la Bonanova", "Sant Gervasi - Galvany", "Putxet i el Farró"],
+  "Horta-Guinardó": ["Baix Guinardó", "Can Baró", "Guinardó", "Font d'en Fargues", "Carmel", "Teixonera", "Sant Genís dels Agudells", "Montbau", "Vall d'Hebron", "Clota", "Horta"],
+  "Nou Barris": ["Vilapicina i la Torre Llobeta", "Porta", "Turó de la Peira", "Can Peguera", "Guineueta", "Canyelles", "Roquetes", "Verdun", "Prosperitat", "Trinitat Nova", "Torre Baró", "Ciutat Meridiana", "Vallbona"],
+  "Sant Andreu": ["Trinitat Vella", "Baró de Viver", "Bon Pastor", "Sant Andreu", "Sagrera", "Congrés i els Indians", "Navas"],
+  "Sant Martí": ["Camp de l'Arpa del Clot", "el Clot", "Parc i la Llacuna del Poblenou", "Vila Olímpica del Poblenou", "Poblenou", "Diagonal Mar i el Front Marítim del Poblenou", "Besòs i el Maresme", "Provençals del Poblenou", "Sant Martí de Provençals", "Verneda i la Pau"]
+};
+
+const BARRIO_ALIASES = {
+  "Barri Gotic": ["Gothic Quarter", "Barri Gòtic", "El Gòtic"],
+  "El Born": ["Born", "La Ribera", "Sant Pere, Santa Caterina i la Ribera"],
+  "Dreta de l'Eixample": ["Eixample Dreta", "Eixample derecha", "La Dreta de l'Eixample"],
+  "Antiga Esquerra de l'Eixample": ["Eixample Antiga Esquerra", "L'Antiga Esquerra de l'Eixample"],
+  "Nova Esquerra de l'Eixample": ["Eixample Esquerra", "Eixample Nova Esquerra", "La Nova Esquerra de l'Eixample"],
+  "Vila de Gracia": ["Gràcia", "Gracia", "Vila de Gràcia"],
+  "Vallcarca i els Penitents": ["Vallcarca"],
+  "Sants - Badal": ["Sants-Badal", "Sants Badal"],
+  "Marina de Port": ["La Marina del Port", "La Marina de Port"],
+  "Maternitat i Sant Ramon": ["La Maternitat", "La Maternitat i Sant Ramon"],
+  "Tres Torres": ["Les Tres Torres"],
+  "Putxet i el Farró": ["El Putxet", "El Putxet i el Farró", "Putxet - El Farró"],
+  "Sagrera": ["La Sagrera"],
+  "Camp de l'Arpa del Clot": ["Camp de l'Arpa", "El Camp de l'Arpa del Clot"],
+  "el Clot": ["Clot"],
+  "Parc i la Llacuna del Poblenou": ["El Parc i la Llacuna del Poblenou"],
+  "Vila Olímpica del Poblenou": ["La Vila Olímpica", "Vila Olímpica"],
+  "Besòs i el Maresme": ["El Besòs", "Besòs"]
+};
+
+const OUTSIDE_BARRIOS = {
+  Hospitalet: "L'Hospitalet de Llobregat",
+  Badalona: "Badalona"
+};
+
+const REQUIRED_LOCATION_COLUMNS = new Set(["district", "barrio"]);
+
 const AREA_RULES = [
   { variants: ["el born", "born", "la ribera", "sant pere", "santa caterina"], area: "El Born", macroArea: "Ciutat Vella" },
   { variants: ["barri gòtic", "barri gotic", "gòtic", "gotic", "gotico", "gothic quarter", "el gòtic"], area: "Gothic Quarter", macroArea: "Ciutat Vella" },
@@ -311,6 +352,7 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
   const singleBedrooms = toRoundedInteger(parsed.single_bedrooms);
   const doubleBedrooms = toRoundedInteger(parsed.double_bedrooms);
   const location = normalizeLocation(parsed);
+  const databaseLocation = normalizeDatabaseLocation(location);
 
   return {
     name: title || parsed.overall_description || "New Listing",
@@ -325,8 +367,8 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
     macro_area: location.macroArea,
     area: location.area,
     area_parsed: location.areaParsed,
-    district: location.macroArea || "Unknown",
-    barrio: canonicalBarrio(location.area || location.areaParsed) || "Unknown",
+    district: databaseLocation.district,
+    barrio: databaseLocation.barrio,
     sub_area: location.areaParsed,
     availability: parsed.availability ?? null,
     available_from: parsed.availability_date ?? null,
@@ -426,6 +468,63 @@ function canonicalize(value, allowedValues) {
   return allowedValues.find(allowedValue => normalizeText(allowedValue) === normalized) || null;
 }
 
+function normalizeDatabaseLocation(location) {
+  const macroArea = canonicalize(location.macroArea, MACRO_AREAS) || firstText(location.macroArea);
+  const outsideBarrio = OUTSIDE_BARRIOS[macroArea];
+  if (outsideBarrio) {
+    return {
+      district: "Outside Barcelona",
+      barrio: outsideBarrio
+    };
+  }
+
+  let district = canonicalize(macroArea, Object.keys(BARRIOS_BY_DISTRICT)) || macroArea || "Unknown";
+  const barrio = (
+    findCanonicalBarrio(location.areaParsed, district) ||
+    findCanonicalBarrio(location.area, district) ||
+    canonicalBarrio(location.area) ||
+    canonicalBarrio(location.areaParsed) ||
+    "Unknown"
+  );
+
+  if (district === "Unknown" && barrio !== "Unknown") {
+    district = districtForBarrio(barrio) || district;
+  }
+
+  return { district, barrio };
+}
+
+function districtForBarrio(barrio) {
+  return Object.entries(BARRIOS_BY_DISTRICT)
+    .find(([, barrios]) => barrios.includes(barrio))?.[0] || null;
+}
+
+function findCanonicalBarrio(value, district) {
+  const normalized = normalizePlace(value);
+  if (!normalized) return null;
+
+  const districtBarrios = BARRIOS_BY_DISTRICT[district];
+  const barrios = districtBarrios || Object.values(BARRIOS_BY_DISTRICT).flat();
+  const candidates = barrios.flatMap(barrio => {
+    const aliases = [barrio, ...(BARRIO_ALIASES[barrio] || [])];
+    return aliases.map(alias => ({ barrio, normalized: normalizePlace(alias) }));
+  }).filter(candidate => candidate.normalized);
+
+  const exact = candidates.find(candidate => candidate.normalized === normalized);
+  if (exact) return exact.barrio;
+
+  const districtNormalized = normalizePlace(district);
+  const matches = candidates
+    .filter(candidate => containsPhrase(normalized, candidate.normalized))
+    .sort((left, right) => right.normalized.length - left.normalized.length);
+  const specific = matches.find(candidate => candidate.normalized !== districtNormalized);
+  return specific?.barrio || matches[0]?.barrio || null;
+}
+
+function containsPhrase(value, phrase) {
+  return ` ${value} `.includes(` ${phrase} `);
+}
+
 function canonicalBarrio(value) {
   const aliases = {
     "Gothic Quarter": "Barri Gotic",
@@ -435,7 +534,16 @@ function canonicalBarrio(value) {
     "Salut": "la Salut",
     "Clot": "el Clot"
   };
-  return aliases[value] || value || null;
+  const text = firstText(value);
+  return aliases[text] || text || null;
+}
+
+function normalizePlace(value) {
+  return normalizeText(value)
+    .replace(/^(?:el|la|les|els|l)\s+/, "")
+    .replace(/\b(?:barrio|barri|distrito|districte)\s+(?:de\s+|del\s+)?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeText(value) {
@@ -487,6 +595,11 @@ async function saveToSupabase({ parsed, url, images, title }) {
   const row = buildSupabaseRow({ parsed, url, images, title, source });
   Object.assign(parsed, {
     ...(source ? { source } : {}),
+    macro_area: row.macro_area,
+    area: row.area,
+    area_parsed: row.area_parsed,
+    district: row.district,
+    barrio: row.barrio,
     price_month: row.price_month,
     size_m2: row.size_m2,
     price_m2: row.price_m2,
@@ -512,6 +625,9 @@ async function insertSupabaseRow(row) {
     } catch (error) {
       const missingColumn = extractMissingColumn(error.message);
       if (!missingColumn || !(missingColumn in cleaned)) throw error;
+      if (REQUIRED_LOCATION_COLUMNS.has(missingColumn)) {
+        throw new Error(`Supabase cannot save required location column '${missingColumn}': ${error.message}`);
+      }
       delete cleaned[missingColumn];
       removedColumns.push(missingColumn);
       console.warn(`Removed unsupported Supabase column: ${missingColumn}`);
@@ -548,9 +664,11 @@ async function updateImagesByUrl(url, images) {
 }
 
 module.exports = {
+  buildSupabaseRow,
   callClaude,
   checkUrlInSupabase,
   getEnv,
+  normalizeDatabaseLocation,
   normalizeLocation,
   readJson,
   requirePost,

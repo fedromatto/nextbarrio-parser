@@ -1277,7 +1277,8 @@
 
         const lines = [
           `✓ Fixed ${result.fixed_types} property_type values (long term → long_term)`,
-          `✓ Backfilled parsed_at for ${result.fixed_dates} rows`
+          `✓ Backfilled parsed_at for ${result.fixed_dates} rows`,
+          `✓ Backfilled district/barrio for ${result.fixed_locations} rows`
         ];
         if (result.errors && result.errors.length > 0) {
           lines.push(`⚠ ${result.errors.length} error(s): ${result.errors.join('; ')}`);

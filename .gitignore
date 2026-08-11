@@ -7,3 +7,4 @@ __pycache__
 .claude
 Start NextBarrio Parser.command
 \[NEW\] *** Start NextBarrio Parser.app
+.env*.local
