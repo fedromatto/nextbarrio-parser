@@ -344,6 +344,156 @@ function toRoundedInteger(value) {
   return number === null ? null : Math.round(number);
 }
 
+function isValidCoordinatePair(row) {
+  const latitude = toFiniteNumber(row?.latitude);
+  const longitude = toFiniteNumber(row?.longitude);
+  return latitude !== null && longitude !== null
+    && latitude >= -90 && latitude <= 90
+    && longitude >= -180 && longitude <= 180;
+}
+
+function coordinateMean(rows) {
+  const valid = (rows || []).filter(isValidCoordinatePair);
+  if (valid.length === 0) return null;
+  return {
+    latitude: valid.reduce((sum, row) => sum + Number(row.latitude), 0) / valid.length,
+    longitude: valid.reduce((sum, row) => sum + Number(row.longitude), 0) / valid.length
+  };
+}
+
+function stableHash(value) {
+  let hash = 2166136261;
+  for (const char of String(value || "")) {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function jitterCoordinate(coordinate, seed, scale) {
+  if (!scale) return coordinate;
+  const hash = stableHash(seed);
+  const angle = (hash % 3600) * Math.PI / 1800;
+  const radius = scale * (0.35 + ((hash >>> 12) % 650) / 1000);
+  return {
+    latitude: coordinate.latitude + Math.sin(angle) * radius,
+    longitude: coordinate.longitude + Math.cos(angle) * radius
+  };
+}
+
+function meaningfulLocation(value) {
+  const normalized = normalizePlace(value);
+  return normalized && normalized !== "unknown" ? normalized : "";
+}
+
+async function fetchCoordinateRows(filters, limit = 200) {
+  const params = new URLSearchParams({
+    select: "latitude,longitude,coordinate_accuracy,district,barrio,area,macro_area",
+    latitude: "not.is.null",
+    longitude: "not.is.null",
+    limit: String(limit)
+  });
+  for (const [column, value] of Object.entries(filters)) {
+    if (value) params.set(column, `eq.${value}`);
+  }
+  return supabaseFetch(`/rest/v1/properties_parsed?${params.toString()}`);
+}
+
+function coordinateResult(rows, source, accuracy, seed, jitterScale = 0) {
+  const coordinate = coordinateMean(rows);
+  if (!coordinate) return null;
+  const adjusted = jitterCoordinate(coordinate, seed, jitterScale);
+  return {
+    ...adjusted,
+    coordinate_source: source,
+    coordinate_accuracy: accuracy
+  };
+}
+
+async function resolveCoordinates(row) {
+  if (isValidCoordinatePair(row)) {
+    return {
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+      coordinate_source: row.coordinate_source || "parser_payload",
+      coordinate_accuracy: row.coordinate_accuracy || "platform"
+    };
+  }
+
+  const seed = row.url || row.address || `${row.district || ""}|${row.barrio || ""}`;
+  try {
+    if (row.url) {
+      const urlRows = await fetchCoordinateRows({ url: row.url }, 20);
+      const exactUrl = coordinateResult(urlRows, "properties_parsed_url_match", "platform", seed);
+      if (exactUrl) return exactUrl;
+    }
+
+    if (row.address) {
+      const addressRows = await fetchCoordinateRows({ address: row.address });
+      const expectedDistrict = meaningfulLocation(row.district || row.macro_area);
+      const expectedBarrio = meaningfulLocation(row.barrio || row.area);
+      const matchingRows = addressRows.filter(candidate => {
+        const district = meaningfulLocation(candidate.district || candidate.macro_area);
+        const barrio = meaningfulLocation(candidate.barrio || candidate.area);
+        return (!expectedDistrict || district === expectedDistrict)
+          && (!expectedBarrio || barrio === expectedBarrio);
+      });
+      const addressMatch = coordinateResult(
+        matchingRows.length > 0 ? matchingRows : addressRows,
+        "properties_parsed_address_average",
+        "approximate_address",
+        seed,
+        0.00016
+      );
+      if (addressMatch) return addressMatch;
+    }
+
+    const barrio = meaningfulLocation(row.barrio);
+    if (barrio) {
+      const barrioRows = await fetchCoordinateRows({ barrio: row.barrio });
+      const barrioMatch = coordinateResult(
+        barrioRows,
+        "properties_parsed_barrio_average",
+        "approximate_barrio",
+        seed,
+        0.00028
+      );
+      if (barrioMatch) return barrioMatch;
+    }
+
+    const area = meaningfulLocation(row.area);
+    if (area) {
+      const areaRows = await fetchCoordinateRows({ area: row.area });
+      const areaMatch = coordinateResult(
+        areaRows,
+        "properties_parsed_area_average",
+        "approximate_area",
+        seed,
+        0.00045
+      );
+      if (areaMatch) return areaMatch;
+    }
+
+    const district = meaningfulLocation(row.district || row.macro_area);
+    if (district && district !== "outside barcelona") {
+      const districtRows = await fetchCoordinateRows({ district: row.district || row.macro_area });
+      const districtMatch = coordinateResult(
+        districtRows,
+        "properties_parsed_district_average",
+        "approximate_district",
+        seed,
+        0.0007
+      );
+      if (districtMatch) return districtMatch;
+    }
+  } catch (error) {
+    // Coordinate enrichment is best-effort and must not prevent saving a listing.
+    console.warn(`Coordinate lookup failed: ${error.message}`);
+  }
+
+  return null;
+}
+
 function buildSupabaseRow({ parsed, url, images = [], title = "", source = null }) {
   const priceMonth = toRoundedInteger(parsed.price_month);
   const sizeM2 = toFiniteNumber(parsed.size_m2);
@@ -369,6 +519,10 @@ function buildSupabaseRow({ parsed, url, images = [], title = "", source = null 
     area_parsed: location.areaParsed,
     district: databaseLocation.district,
     barrio: databaseLocation.barrio,
+    latitude: toFiniteNumber(parsed.latitude),
+    longitude: toFiniteNumber(parsed.longitude),
+    coordinate_source: parsed.coordinate_source ?? null,
+    coordinate_accuracy: parsed.coordinate_accuracy ?? null,
     sub_area: location.areaParsed,
     availability: parsed.availability ?? null,
     available_from: parsed.availability_date ?? null,
@@ -593,6 +747,8 @@ async function saveToSupabase({ parsed, url, images, title }) {
   const source = getSourceFromUrl(url);
   if (source) parsed.source = source;
   const row = buildSupabaseRow({ parsed, url, images, title, source });
+  const coordinates = await resolveCoordinates(row);
+  if (coordinates) Object.assign(row, coordinates);
   Object.assign(parsed, {
     ...(source ? { source } : {}),
     macro_area: row.macro_area,
@@ -604,7 +760,11 @@ async function saveToSupabase({ parsed, url, images, title }) {
     size_m2: row.size_m2,
     price_m2: row.price_m2,
     single_bedrooms: row.single_bedrooms,
-    double_bedrooms: row.double_bedrooms
+    double_bedrooms: row.double_bedrooms,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    coordinate_source: row.coordinate_source,
+    coordinate_accuracy: row.coordinate_accuracy
   });
   const result = await insertSupabaseRow(row);
   return Array.isArray(result) ? result[0] : result;
@@ -667,11 +827,13 @@ module.exports = {
   buildSupabaseRow,
   callClaude,
   checkUrlInSupabase,
+  coordinateMean,
   getEnv,
   normalizeDatabaseLocation,
   normalizeLocation,
   readJson,
   requirePost,
+  resolveCoordinates,
   sendError,
   saveToSupabase,
   sendJson,
